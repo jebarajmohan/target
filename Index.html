@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Nifty Options — Target Calculator</title>
+  <style>
+    :root{--bg:#f6f8fb;--card:#ffffff;--muted:#64748b;--accent:#0369a1;--dark:#0f172a}
+    *{box-sizing:border-box}
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);margin:0;padding:20px}
+    .card{background:var(--card);border-radius:14px;box-shadow:0 12px 30px rgba(20,30,60,0.08);padding:24px;max-width:520px;width:100%}
+    h1{font-size:20px;margin:0 0 8px;color:var(--dark)}
+    label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+    input{width:100%;padding:10px;border-radius:8px;border:1px solid #dce0e6;margin-top:4px;font-size:14px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+    .actions{margin-top:16px;display:flex;gap:10px}
+    .btn{padding:10px 14px;border:none;border-radius:8px;background:var(--accent);color:white;cursor:pointer;font-weight:600}
+    .btn.ghost{background:#475569}
+    .result{margin-top:16px;padding:14px;background:#f1f5f9;border-radius:10px}
+    .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #e3e8ef}
+    .row:last-child{border-bottom:none}
+    @media (max-width:480px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Nifty Options — Target Calculator</h1>
+
+    <div class="grid">
+      <div>
+        <label for="buy">Buy Price</label>
+        <input id="buy" type="number" placeholder="e.g. 40" />
+      </div>
+      <div>
+        <label for="tprice">Target Price</label>
+        <input id="tprice" type="number" placeholder="e.g. 45" />
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:12px">
+      <div>
+        <label for="qty">Quantity (contracts)</label>
+        <input id="qty" type="number" value="1" min="0" />
+      </div>
+      <div>
+        <label for="lot">Lot Size</label>
+        <input id="lot" type="number" value="75" min="1" />
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="calcBtn" class="btn">Calculate</button>
+      <button id="clearBtn" class="btn ghost">Clear</button>
+    </div>
+
+    <!-- result container (script will render rows inside) -->
+    <div id="out" class="result" style="display:none" aria-live="polite"></div>
+  </div>
+
+  <script>
+  (function(){
+    // Safe initialization after DOM ready
+    function init(){
+      const $ = id => document.getElementById(id);
+      const buyEl = $('buy');
+      const tpriceEl = $('tprice');
+      const qtyEl = $('qty');
+      const lotEl = $('lot');
+      const outEl = $('out');
+      const calcBtn = $('calcBtn');
+      const clearBtn = $('clearBtn');
+
+      const num = v => { const n = Number(v); return isNaN(n) ? 0 : n; };
+      const fmt = n => (Math.round(n * 100) / 100).toLocaleString('en-IN');
+
+      if(!buyEl || !tpriceEl || !qtyEl || !lotEl || !outEl || !calcBtn || !clearBtn){
+        console.error('Missing required DOM elements — cannot initialize calculator');
+        if(calcBtn) calcBtn.disabled = true;
+        if(clearBtn) clearBtn.disabled = true;
+        return;
+      }
+
+      function renderResult(rows){
+        // build safe HTML
+        outEl.innerHTML = rows.map(function(r){
+          return '<div class="row"><div>' + r.label + '</div><div>' + r.value + '</div></div>';
+        }).join('');
+        outEl.style.display = 'block';
+      }
+
+      function calcAll(){
+        const buy = num(buyEl.value);
+        const t = num(tpriceEl.value);
+        const qty = Math.max(0, Math.trunc(num(qtyEl.value)));
+        const lot = Math.max(1, Math.trunc(num(lotEl.value)));
+
+        if(!buy || !t){
+          // in live mode we silently do nothing until both present
+          return;
+        }
+
+        const profitUnit = t - buy;
+        const pct = ((t - buy) / buy) * 100;
+        const totalUnits = qty * lot;
+        const principal = buy * totalUnits;
+        const totalProfit = profitUnit * totalUnits;
+
+        const rows = [
+          {label: 'Target %', value: (Math.round(pct*100)/100) + '%'},
+          {label: 'Principal Amount', value: '₹ ' + fmt(principal)},
+          {label: 'Total Profit', value: '₹ ' + fmt(totalProfit)}
+        ];
+
+        renderResult(rows);
+      }
+
+      function clearAll(){
+        buyEl.value = '';
+        tpriceEl.value = '';
+        qtyEl.value = '1';
+        lotEl.value = '75';
+        outEl.style.display = 'none';
+        outEl.innerHTML = '';
+      }
+
+      // manual controls
+      calcBtn.addEventListener('click', function(){ if(buyEl.value && tpriceEl.value) calcAll(); });
+      clearBtn.addEventListener('click', clearAll);
+
+      // Option B: Live update ONLY when Buy & Target are filled (debounced)
+      function debounce(fn, ms){ let t = null; return function(){ clearTimeout(t); var args = arguments; t = setTimeout(function(){ fn.apply(null, args); }, ms); }; }
+      var liveCalc = debounce(function(){ if(buyEl.value && tpriceEl.value) calcAll(); }, 200);
+      [buyEl, tpriceEl, qtyEl, lotEl].forEach(function(el){ el.addEventListener('input', liveCalc); });
+
+      // Enter key -> calculate (manual)
+      [buyEl, tpriceEl, qtyEl, lotEl].forEach(function(el){ el.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ if(buyEl.value && tpriceEl.value) calcAll(); } }); });
+
+      console.log('Nifty Target Calculator ready — live mode: Option B');
+    }
+
+    if(document.readyState === 'loading'){
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  })();
+  </script>
+</body>
+</html>
