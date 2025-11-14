@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Nifty Options — Target & Zerodha-like Charges</title>
+  <style>
+    :root{--bg:#f6f8fb;--card:#fff;--muted:#64748b;--accent:#0369a1;--ok:#16a34a;--danger:#ef4444}
+    *{box-sizing:border-box}
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);margin:0;padding:20px}
+    .card{background:var(--card);border-radius:12px;box-shadow:0 10px 30px rgba(20,30,60,0.08);padding:20px;max-width:680px;width:100%}
+    h1{font-size:18px;margin:0 0 10px;color:#0f172a}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+    input{width:100%;padding:8px;border-radius:8px;border:1px solid #e6e9ef;font-size:14px}
+    .actions{display:flex;gap:8px;margin-top:10px}
+    .btn{padding:8px 12px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+    .btn.ghost{background:#475569}
+    .panel{margin-top:16px;background:#fff;border-radius:10px;padding:12px;border:1px solid #eef2f7}
+    .row{display:flex;justify-content:space-between;padding:8px 6px;border-bottom:1px solid #f1f5f9}
+    .row:last-child{border-bottom:none}
+    .muted{color:var(--muted);font-size:13px}
+    .small{font-size:13px;color:var(--muted)}
+    .value-rupee{font-weight:600}
+    .profit{color:var(--ok);font-weight:700}
+    .loss{color:var(--danger);font-weight:700}
+    @media (max-width:720px){.grid{grid-template-columns:1fr 1fr}}
+    @media (max-width:420px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Nifty Options — Target & Zerodha-like Charges</h1>
+
+    <div class="grid">
+      <div>
+        <label for="buy">Buy Price</label>
+        <input id="buy" type="number" step="any" placeholder="e.g. 40" />
+      </div>
+      <div>
+        <label for="sell">Sell Price</label>
+        <input id="sell" type="number" step="any" placeholder="e.g. 45" />
+      </div>
+      <div>
+        <label for="qty">Quantity (contracts)</label>
+        <input id="qty" type="number" value="1" min="0" />
+      </div>
+      <div>
+        <label for="lot">Lot Size</label>
+        <input id="lot" type="number" value="75" min="1" />
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="clearBtn" class="btn ghost">Clear</button>
+      <div style="flex:1"></div>
+      <div class="small muted"></div>
+    </div>
+
+    <div id="panel" class="panel" style="display:none">
+      <div class="row"><div>Target %</div><div id="r-pct" class="value-rupee"></div></div>
+      <div class="row"><div>Principal Amount</div><div id="r-principal" class="value-rupee"></div></div>
+      <div class="row"><div><strong>Total Profit</strong></div><div id="r-totalprofit" class="value-rupee"></div></div>
+      <div class="row"><div><strong>Net P&amp;L</strong></div><div id="r-net" class="value-rupee"></div></div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  function $(id){return document.getElementById(id)}
+  const buyEl = $('buy'), sellEl = $('sell'), qtyEl = $('qty'), lotEl = $('lot')
+  const calcBtn = $('calcBtn'), clearBtn = $('clearBtn')
+  const panel = $('panel')
+
+  // output fields
+  const rPct = $('r-pct'), rPrincipal = $('r-principal'), rTotalProfit = $('r-totalprofit'), rNet = $('r-net')
+
+  // default rates (tuned to match Zerodha-like numbers in screenshot)
+  const BROKER_PER_ORDER = 20 // ₹20 per executed order
+  const GST_RATE = 0.18
+  const STT_RATE = 0.000625 // 0.0625% on sell-side premium
+  const EXCHANGE_RATE = 0.000355 // Zerodha-aligned exchange rate
+  const SEBI_RATE = 0.000001 // tiny
+  const STAMP_RATE = 0.00003 // tiny on buy
+
+  function num(v){const n = Number(v); return isNaN(n)?0:n}
+  function fmt(n){ return '₹ ' + (Math.round(n*100)/100).toLocaleString('en-IN') }
+
+  function calculate(){
+    const buy = num(buyEl.value)
+    const sell = num(sellEl.value)
+    const qty = Math.max(0, Math.trunc(num(qtyEl.value)))
+    const lot = Math.max(1, Math.trunc(num(lotEl.value)))
+
+    if(!buy || !sell){ return }
+
+    const buyTurn = buy * qty * lot
+    const sellTurn = sell * qty * lot
+    const turnover = buyTurn + sellTurn
+
+    const profitPerUnit = sell - buy
+    const totalUnits = qty * lot
+    const principal = buy * totalUnits
+    const totalProfit = profitPerUnit * totalUnits
+
+    const pct = ((sell - buy) / buy) * 100
+
+    // update UI (rounded)
+    rPct.textContent = (Math.round(pct*100)/100) + '%'
+    rPrincipal.textContent = fmt(principal)
+    rTotalProfit.textContent = fmt(Math.round(totalProfit*100)/100)
+
+    // compute charges
+    const executedOrders = (buy>0?1:0) + (sell>0?1:0)
+    const brokerage = Math.round((BROKER_PER_ORDER * executedOrders)*100)/100
+    const stt = Math.round((sellTurn * STT_RATE)*100)/100
+    const exchange = Math.round((turnover * EXCHANGE_RATE)*100)/100
+    const sebi = Math.round((turnover * SEBI_RATE)*100)/100
+    const stamp = Math.round((buyTurn * STAMP_RATE)*100)/100
+    const gst = Math.round(((brokerage + exchange + sebi) * GST_RATE)*100)/100
+    const totalCharges = Math.round((brokerage + stt + exchange + gst + sebi + stamp)*100)/100
+    const net = totalProfit - totalCharges // keep charges hidden; show net as totalProfit for now
+    rNet.innerHTML = (net>=0) ? '<span class="profit">' + fmt(Math.round(net*100)/100) + '</span>' : '<span class="loss">' + fmt(Math.round(net*100)/100) + '</span>'
+
+    panel.style.display = 'block'
+  }
+
+  function clearAll(){ buyEl.value=''; sellEl.value=''; qtyEl.value='1'; lotEl.value='75'; panel.style.display='none' }
+
+  // Calculate button removed
+  clearBtn.addEventListener('click', clearAll)
+
+  // live update (Option B: only when buy & sell filled)
+  function debounce(fn, ms){ let t=null; return function(){ clearTimeout(t); var args=arguments; t = setTimeout(function(){ fn.apply(null,args) }, ms) }}
+  const live = debounce(function(){ if(buyEl.value && sellEl.value) calculate() }, 200)
+  ;[buyEl,sellEl,qtyEl,lotEl].forEach(el => el.addEventListener('input', live))
+
+})();
+</script>
+</body>
+</html>
