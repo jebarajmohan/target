@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Trading Calculator – Options & Crypto</title>
+
+<style>
+:root{
+  --bg:#f6f8fb;--card:#fff;--muted:#64748b;
+  --accent:#0369a1;--ok:#16a34a;--danger:#ef4444
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:20px;background:var(--bg);
+  font-family:Inter,system-ui
+}
+.card{
+  max-width:900px;margin:auto;background:var(--card);
+  padding:20px;border-radius:12px;
+  box-shadow:0 10px 30px rgba(0,0,0,.08)
+}
+h1{font-size:18px;margin-bottom:12px}
+
+/* tabs */
+.tabs{display:flex;gap:8px;margin-bottom:14px}
+.tab{
+  padding:8px 14px;border-radius:8px;
+  background:#e5e7eb;cursor:pointer;font-size:14px
+}
+.tab.active{background:var(--accent);color:#fff}
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* common */
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+label{font-size:13px;color:var(--muted)}
+input{
+  width:100%;padding:8px;border-radius:8px;
+  border:1px solid #e5e7eb
+}
+.panel{
+  margin-top:14px;border:1px solid #e5e7eb;
+  border-radius:10px;padding:10px
+}
+.row{
+  display:flex;justify-content:space-between;
+  padding:8px 4px;border-bottom:1px solid #f1f5f9
+}
+.row:last-child{border-bottom:none}
+.profit{color:var(--ok);font-weight:700}
+.loss{color:var(--danger);font-weight:700}
+
+@media(max-width:720px){.grid{grid-template-columns:1fr 1fr}}
+@media(max-width:420px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+
+<body>
+<div class="card">
+<h1>Trading Calculator</h1>
+
+<div class="tabs">
+  <div class="tab active" data-tab="options">Nifty Options</div>
+  <div class="tab" data-tab="crypto">Crypto</div>
+</div>
+
+<!-- OPTIONS TAB -->
+<div id="options" class="tab-content active">
+  <div class="grid">
+    <div><label>Buy Price</label><input id="buy" type="number"></div>
+    <div><label>Sell Price</label><input id="sell" type="number"></div>
+    <div><label>Qty</label><input id="qty" type="number" value="1"></div>
+    <div><label>Lot</label><input id="lot" type="number" value="65"></div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><span>Units</span><span id="oUnits">0</span></div>
+    <div class="row"><span>P&L</span><span id="oPL">₹ 0</span></div>
+  </div>
+</div>
+
+<!-- CRYPTO TAB -->
+<div id="crypto" class="tab-content">
+  <div class="grid">
+    <div><label>Buy Price</label><input id="cBuy" type="number" step="any"></div>
+    <div><label>Sell Price</label><input id="cSell" type="number" step="any"></div>
+    <div><label>Quantity</label><input id="cQty" type="number" step="any"></div>
+    <div><label>Fee (%)</label><input value="0.05" readonly></div>
+  </div>
+
+  <div class="panel">
+  <div class="row">
+    <span>Buy Fee</span>
+    <span id="cBuyFee" class="loss">-₹ 0</span>
+  </div>
+  <div class="row">
+    <span>Sell Fee</span>
+    <span id="cSellFee" class="loss">-₹ 0</span>
+  </div>
+  <div class="row">
+    <span>Total Fee</span>
+    <span id="cTotalFee" class="loss">-₹ 0</span>
+  </div>
+  <div class="row">
+    <span>Breakeven Price</span>
+    <span id="cBE">₹ 0</span>
+  </div>
+  <div class="row">
+    <span>Actual P&amp;L</span>
+    <span id="cActualPL">₹ 0</span>
+  </div>
+  <div class="row">
+    <span>Realized P&amp;L</span>
+    <span id="cRealPL">₹ 0</span>
+  </div>
+</div>
+
+
+<script>
+/* Tabs */
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.onclick=()=>{
+    document.querySelectorAll('.tab,.tab-content')
+      .forEach(e=>e.classList.remove('active'))
+    tab.classList.add('active')
+    document.getElementById(tab.dataset.tab).classList.add('active')
+  }
+})
+
+/* Options */
+function optionsCalc(){
+  const buy=+buy.value,sell=+sell.value
+  const qty=+qty.value,lot=+lot.value
+  const units=qty*lot
+  const pnl=(sell-buy)*units
+  oUnits.textContent=units
+  oPL.textContent='₹ '+pnl.toFixed(2)
+  oPL.className=pnl>=0?'profit':'loss'
+}
+;['buy','sell','qty','lot'].forEach(id=>{
+  document.getElementById(id).oninput=optionsCalc
+})
+
+/* Crypto – split fees */
+function cryptoCalc(){
+  const buy = +cBuy.value
+  const sell = +cSell.value
+  const qty = +cQty.value
+  const feeRate = 0.0005 // 0.05%
+
+  if(!qty){
+    cBuyFee.textContent='-₹ 0'
+    cSellFee.textContent='-₹ 0'
+    cTotalFee.textContent='-₹ 0'
+    cBE.textContent='₹ 0'
+    cActualPL.textContent='₹ 0'
+    cRealPL.textContent='₹ 0'
+    return
+  }
+
+  // Fees (independent)
+  const buyFee  = buy  ? buy  * qty * feeRate : 0
+  const sellFee = sell ? sell * qty * feeRate : 0
+  const totalFee = buyFee + sellFee
+
+  cBuyFee.textContent  = '-₹ ' + buyFee.toFixed(4)
+  cSellFee.textContent = '-₹ ' + sellFee.toFixed(4)
+  cTotalFee.textContent= '-₹ ' + totalFee.toFixed(4)
+
+// Breakeven (context aware)
+if(buy){
+  // Breakeven SELL price
+  const beSell = buy * (1 + feeRate) / (1 - feeRate)
+  cBE.textContent = 'Sell @ ₹ ' + beSell.toFixed(4)
+  cBE.className = ''
+}
+else if(sell){
+  // Breakeven BUY price
+  const beBuy = sell * (1 - feeRate) / (1 + feeRate)
+  cBE.textContent = 'Buy @ ₹ ' + beBuy.toFixed(4)
+  cBE.className = ''
+}
+else{
+  cBE.textContent = '₹ 0'
+}
+
+  // Actual & Realized P&L (only if both exist)
+  if(buy && sell){
+    const actualPL = (sell - buy) * qty
+    const realizedPL = actualPL - totalFee
+
+    cActualPL.textContent = '₹ ' + actualPL.toFixed(4)
+    cActualPL.className = actualPL >= 0 ? 'profit' : 'loss'
+
+    cRealPL.textContent = '₹ ' + realizedPL.toFixed(4)
+    cRealPL.className = realizedPL >= 0 ? 'profit' : 'loss'
+  }else{
+    cActualPL.textContent='₹ 0'
+    cRealPL.textContent='₹ 0'
+  }
+}
+
+;['cBuy','cSell','cQty'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',cryptoCalc)
+})
+</script>
+</body>
+</html>
